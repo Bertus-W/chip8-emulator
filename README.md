@@ -48,7 +48,6 @@ Make sure that `raylib` is correctly installed and accessible by your compiler.
 
 - Ensure that your compiler supports C++11 or later.
 - The emulator has been tested across multiple platforms to verify compatibility.
-- If you encounter any issues during installation or building, refer to the official `raylib` documentation for troubleshooting tips.
 
 With everything set up, you should be ready to run the CHIP-8 emulator and explore its functionality!
 
