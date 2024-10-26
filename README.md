@@ -38,7 +38,3 @@ make
 ```
 
 Make sure `raylib` is properly installed and available for your compiler.
-
----
-
-If you encounter any issues with building or running the emulator, please consult the [raylib documentation](https://www.raylib.com/).
