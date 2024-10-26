@@ -301,7 +301,7 @@ int main(int argc, char *argv[]) {
   SetTargetFPS(60);
 
   // Initialize CHIP-8 components
-  bool display[DISPLAY_HEIGHT][DISPLAY_WIDTH];
+  bool display[DISPLAY_HEIGHT][DISPLAY_WIDTH] = {};
   uint8_t *memory = (uint8_t *)calloc(MEMORY_SIZE, sizeof(uint8_t));
   uint8_t *Vx = (uint8_t *)calloc(VX_SIZE, sizeof(uint8_t));
   uint16_t *stack = (uint16_t *)calloc(STACK_SIZE, sizeof(uint16_t));
