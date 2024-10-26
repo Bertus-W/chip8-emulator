@@ -86,7 +86,7 @@ void clearDisplay(bool (&display)[DISPLAY_HEIGHT][DISPLAY_WIDTH]) {
   }
 }
 
-void stepProgram(uint8_t *&memory, uint8_t *&program, uint8_t *&Vx, uint16_t &I,
+void stepProgram(uint8_t *&memory, uint8_t *&program, uint8_t *&V, uint16_t &I,
                  uint16_t *&stack, uint8_t &DT, uint8_t &ST,
                  bool (&display)[32][64], bool (&keyPresses)[16]) {
   uint8_t left_op = *program;
@@ -98,96 +98,94 @@ void stepProgram(uint8_t *&memory, uint8_t *&program, uint8_t *&Vx, uint16_t &I,
   uint16_t opcode = (left_op << 8) | (right_op);
   uint16_t last_3 = opcode & 0x0FFF;
 
-  uint8_t vx = *(Vx + second);
-  uint8_t vy = *(Vx + third);
+  uint8_t vx = *(V + second);
+  uint8_t vy = *(V + third);
 
-  if (opcode == 0x00E0) { // Clear display
+  if (opcode == 0x00E0) { // CLS - Clear display
     clearDisplay(display);
   } else if (opcode == 0x00EE) {
     stack--;
     program = memory + *stack;
     *stack = 0;
-  } else if (first == 0x1) { // Jump to address NNN
+  } else if (first == 0x1) { // JP addr - Jump to address NNN
     program = memory + last_3;
     return;
-  } else if (first == 0x2) {
+  } else if (first == 0x2) { // CALL addr
     *stack = program - memory;
     stack++;
     program = memory + last_3;
     return;
-  } else if (first == 0x3) {
-    if (*(Vx + second) == right_op) {
+  } else if (first == 0x3) { // SE Vx, byte - Skip next instruction if Vx = kk
+    if (vx == right_op) {
       program += 2;
     }
-  } else if (first == 0x4) {
-    if (*(Vx + second) != right_op) {
+  } else if (first == 0x4) { // SNE Vx, byte - Skip next instruction if Vx != kk
+    if (vx != right_op) {
       program += 2;
     }
-  } else if (first == 0x5) {
-    if (*(Vx + second) == *(Vx + third)) {
+  } else if (first == 0x5) { // SE Vx, Vy - Skip next instruction if Vx = Vy
+    if (vx == vy) {
       program += 2;
     }
-  } else if (first == 0x6) { // Set VX to NN
-    *(Vx + second) = right_op;
-  } else if (first == 0x7) { // Set VX to NN
-    *(Vx + second) += right_op;
-  } else if (first == 0x8) {
-    uint16_t res;
-    uint8_t val1, val2;
+  } else if (first == 0x6) { // LD Vx, byte - Set VX = kk
+    *(V + second) = right_op;
+  } else if (first == 0x7) { // ADD Vx, byte - Set Vx = Vx + kk
+    *(V + second) += right_op;
+  } else if (first == 0x8) { // Arithmetic operations
+    uint16_t res;            // extra var for result checking
 
     switch (fourth) {
-    case 0x0:
-      *(Vx + second) = vy;
+    case 0x0: // LD Vx, Vy - Set Vx = Vy
+      *(V + second) = vy;
       break;
-    case 0x1:
-      *(Vx + second) = vx | vy;
+    case 0x1: // OR Vx, Vy - Set Vx = Vx OR Vy bitwise
+      *(V + second) = vx | vy;
       break;
-    case 0x2:
-      *(Vx + second) = vx & vy;
+    case 0x2: // AND Vx, Vy - Set Vx = Vx AND Vy bitwise
+      *(V + second) = vx & vy;
       break;
-    case 0x3:
-      *(Vx + second) = vx ^ vy;
+    case 0x3: // XOR Vx, Vy - Set Vx = Vx XOR Vy bitwise
+      *(V + second) = vx ^ vy;
       break;
-    case 0x4:
+    case 0x4: // ADD Vx, Vy - Set Vx = Vx + Vy, set VF = carry
       res = ((uint16_t)vx) + ((uint16_t)vy);
 
       if (res > 255) {
-        *(Vx + 0xF) = 1;
+        *(V + 0xF) = 1;
         res &= 0xFF;
       } else {
-        *(Vx + 0xF) = 0;
+        *(V + 0xF) = 0;
       }
 
-      *(Vx + second) = (uint8_t)res;
+      *(V + second) = (uint8_t)res;
       break;
-    case 0x5:
-      *(Vx + 0xF) = (vx < vy) ? 0 : 1;
-      *(Vx + second) = vx - vy;
+    case 0x5: // SUB Vx, Vy - Set Vx = Vx - Vy, set VF = NOT borrow.
+      *(V + 0xF) = (vx < vy) ? 0 : 1;
+      *(V + second) = vx - vy;
       break;
-    case 0x7:
-      // Set VF = NOT borrow (1 if VY >= VX, 0 if VY < VX)
-      *(Vx + 0xF) = (vy >= vx) ? 1 : 0;
-      *(Vx + second) = vy - vx;
+    case 0x6: // SHR Vx {, Vy} - Set Vx = Vx SHR 1. bitshift right (div by 2)
+      *(V + 0xF) = (vx & 0b1) ? 1 : 0;
+      *(V + second) = vx >> 1;
       break;
-    case 0x6:
-      *(Vx + 0xF) = (vx & 0b1) ? 1 : 0;
-      *(Vx + second) = vx >> 1;
+    case 0x7: // SUBN Vx, Vy - Set Vx = Vy - Vx, set VF = NOT borrow
+      *(V + 0xF) = (vy >= vx) ? 1 : 0;
+      *(V + second) = vy - vx;
       break;
-    case 0xE:
-      *(Vx + 0xF) = (vx >> 15 & 0b1) ? 1 : 0;
-      *(Vx + second) = vx << 1;
+    case 0xE: // SHL Vx {, Vy} - Set Vx = Vx SHL 1. bitshift left (mult by 2)
+      *(V + 0xF) = (vx >> 15 & 0b1) ? 1 : 0;
+      *(V + second) = vx << 1;
       break;
     default:
       break;
     }
-  } else if (first == 0x9) {
+  } else if (first == 0x9) { // SNE Vx, Vy - Skip next instruction if Vx != Vy.
     if (vx != vy) {
       program += 2;
     }
-  } else if (first == 0xA) { // Set I to NNN
+  } else if (first == 0xA) { // LD I, addr - Set I to NNN
     I = last_3;
-  } else if (first == 0xC) {
-    *(Vx + second) = (rand() % 255) & right_op;
+  } else if (first == 0xC) { // RND Vx, byte - Set Vx = random byte AND kk.
+    *(V + second) = (rand() % 255) & right_op;
   } else if (first == 0xD) {      // Draw sprite (Dxyn)
     uint8_t n = fourth;           // Number of rows (N)
     uint8_t *sprite = memory + I; // Sprite data starts at I
@@ -209,33 +207,32 @@ void stepProgram(uint8_t *&memory, uint8_t *&program, uint8_t *&Vx, uint16_t &I,
         display[y][x] ^= sprite_pixel; // XOR the sprite onto the display
       }
     }
-    *(Vx + 0xF) = collision ? 1 : 0; // Set VF to 1 if there was a collision
-  } else if (first == 0xE) {
-    if (right_op == 0x9E) {
+    *(V + 0xF) = collision ? 1 : 0; // Set VF to 1 if there was a collision
+  } else if (first == 0xE) {        // Keyboard stuff
+    if (right_op == 0x9E) {         // SKP Vx - Skip next if key pressed
       if (keyPresses[vx]) {
         program += 2;
       }
-    } else if (right_op == 0xA1) {
+    } else if (right_op == 0xA1) { // SKNP Vx - Skip next if key not pressed
       if (!keyPresses[vx]) {
         program += 2;
       }
     } else {
       printf("E command Unknown right_op: %02x\n", right_op);
     }
-  } else if (first == 0xF) {
+  } else if (first == 0xF) { // Misc. stuff
     uint16_t val;
 
     switch (right_op) {
-    case 0x07:
-      *(Vx + second) = DT;
+    case 0x07: // LD Vx, DT - Set Vx = delay timer value
+      *(V + second) = DT;
       break;
-    case 0x0A:
+    case 0x0A: // LD Vx, K - Wait for a key press, store val of the key in Vx.
       static int found = -1;
       static bool released = false;
 
       for (int i = 0; i < 16; i++) {
         if (keyPresses[i]) {
-          *(Vx + second) = i;
           found = i;
         } else {
           if (found != -1 && !released && found == i) {
@@ -246,36 +243,36 @@ void stepProgram(uint8_t *&memory, uint8_t *&program, uint8_t *&Vx, uint16_t &I,
       if (found == -1 || !released) {
         program -= 2;
       } else {
+        *(V + second) = found;
         found = -1;
         released = false;
       }
       break;
-    case 0x15:
+    case 0x15: // LD DT, Vx - Set delay timer = Vx.
       DT = vx;
       break;
-    case 0x18:
+    case 0x18: // LD ST, Vx - Set sound timer = Vx.
       ST = vx;
       break;
-    case 0x29:
+    case 0x1E: // ADD I, Vx - Set I = I + Vx.
+      I += vx;
+      break;
+    case 0x29: // LD F, Vx - Set I = location of sprite for digit Vx.
       I = FONT_START_ADDRES + (5 * vx);
       break;
-    case 0x1E:
-      I += (uint8_t) * (Vx + second);
+    case 0x33: // LD B, Vx - Store BCD of Vx in memory at I, I+1, I+2
+      *(memory + I) = (char)(vx / 100);
+      *(memory + I + 1) = (char)(vx % 100 / 10);
+      *(memory + I + 2) = (char)(vx % 10);
       break;
-    case 0x33:
-      val = (uint8_t) * (Vx + second);
-      *(memory + I) = (char)(val / 100);
-      *(memory + I + 1) = (char)(val % 100 / 10);
-      *(memory + I + 2) = (char)(val % 10);
-      break;
-    case 0x55:
+    case 0x55: // LD [I], Vx - Store reg V0 - Vx in memory at location I.
       for (int i = 0; i <= second; i++) {
-        *(memory + I + i) = *(Vx + i);
+        *(memory + I + i) = *(V + i);
       }
       break;
-    case 0x65:
+    case 0x65: // LD Vx, [I] - Read ref V0 - Vx from memory at location I.
       for (int i = 0; i <= second; i++) {
-        *(Vx + i) = *(memory + I + i);
+        *(V + i) = *(memory + I + i);
       }
       break;
     default:
@@ -289,8 +286,6 @@ void stepProgram(uint8_t *&memory, uint8_t *&program, uint8_t *&Vx, uint16_t &I,
 
   program += 2; // Move to the next opcode
 }
-
-void soundControl(bool, Sound);
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
